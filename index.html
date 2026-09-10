@@ -18,7 +18,7 @@
     <div class="scan-box">
       <input id="imageInput" type="file" accept="image/*" hidden>
       <button id="scanButton" class="primary">📷 Scan Screenshot</button>
-      <span id="scanName">Upload a Logic Riddle screenshot and the app will detect the grid.</span>
+      <span id="scanName">Upload a Logic Riddle screenshot and crop the puzzle grid before detection.</span>
     </div>
     <div id="scanPreview" class="scan-preview" hidden>
       <canvas id="previewCanvas"></canvas>
@@ -52,5 +52,6 @@
 </main>
 <script src="script.js"></script>
 <script src="scan-fix.js"></script>
+<script src="crop-fix.js"></script>
 </body>
 </html>
