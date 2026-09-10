@@ -2,13 +2,17 @@
 
 A mobile-friendly browser-based solver for the **Logic Riddle** color-grid puzzle. Built with plain HTML, CSS and JavaScript with no dependencies or build step.
 
-## 🚀 Use the Solver
+## 🎮 Play the Original Game
 
-Try the live solver here:
+The solver is designed for **Logic Riddle - Dog Puzzle Game** by Easybrain. The game is available on Google Play:
 
-👉 **https://dog-puzzle-solver.m7503345712.workers.dev/**
+👉 [Play Logic Riddle on Google Play](https://play.google.com/store/apps/details?id=com.easybrain.logic.riddle.puzzle)
 
-Upload a Logic Riddle screenshot, crop the puzzle grid, let the app detect the board, and tap **🦊 Solve** to get the solution.
+## 🦊 Use the Solver
+
+👉 [Open the Live Logic Riddle Solver](https://dog-puzzle-solver.m7503345712.workers.dev/)
+
+Use the solver to scan a screenshot from the game, detect the puzzle board, and find the solution.
 
 ## 🧩 Puzzle Rules
 
@@ -33,14 +37,16 @@ Upload a Logic Riddle screenshot, crop the puzzle grid, let the app detect the b
 
 ## 📷 Screenshot Workflow
 
-1. Open the **[Live Solver](https://dog-puzzle-solver.m7503345712.workers.dev/)**.
-2. Tap **Scan Screenshot**.
-3. Select a Logic Riddle screenshot.
-4. Use the crop handles to select only the puzzle grid.
-5. Move or resize the crop area if needed.
-6. Tap **Crop & Detect**.
-7. Check the detected board.
-8. Tap **🦊 Solve**.
+1. Play a level in **Logic Riddle**.
+2. Take a screenshot of the puzzle.
+3. Open the [Live Solver](https://dog-puzzle-solver.m7503345712.workers.dev/).
+4. Tap **Scan Screenshot**.
+5. Select your Logic Riddle screenshot.
+6. Use the crop handles to select only the puzzle grid.
+7. Move or resize the crop area if needed.
+8. Tap **Crop & Detect**.
+9. Check the detected board.
+10. Tap **🦊 Solve**.
 
 Cropping is especially useful on mobile screenshots because it removes the status bar, puzzle title, hearts, instructions and other UI elements before detection.
 
