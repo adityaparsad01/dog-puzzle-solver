@@ -25,7 +25,7 @@ function paletteFor(n){
 
 function colors(){return paletteFor(size)}
 
-function blankBoard(n){return Array.from({length:n},()=>Array(n).fill(0))}
+function blankBoard(n){return Array.from({length:n},()=>Array(n).fill(null))}
 
 function setSize(n,loadBlank=true){
   size=n;
@@ -53,9 +53,10 @@ function render(){
   for(let r=0;r<size;r++){
     for(let c=0;c<size;c++){
       const b=document.createElement('button');
+      const colorIndex=board[r][c];
       b.className='cell'+(dogs[r]===c?' dog solution':'');
-      b.style.background=cs[board[r][c]][1];
-      b.title=`R${r+1} C${c+1}: ${cs[board[r][c]][0]}`;
+      b.style.background=colorIndex===null?'#fff':cs[colorIndex][1];
+      b.title=colorIndex===null?`R${r+1} C${c+1}: Empty`:`R${r+1} C${c+1}: ${cs[colorIndex][0]}`;
       b.onclick=()=>{
         board[r][c]=selected;
         dogs.fill(-1);
@@ -70,10 +71,18 @@ function render(){
 
 function solve(){
   dogs.fill(-1);
-  const cols=new Set();
-  const usedColors=new Set();
   const cs=colors();
   let nodes=0;
+
+  if(board.some(row=>row.some(cell=>cell===null))){
+    $('status').textContent='⚠️ Please paint every cell before solving.';
+    $('solution').style.display='none';
+    render();
+    return;
+  }
+
+  const cols=new Set();
+  const usedColors=new Set();
 
   function legal(r,c){
     if(cols.has(c)||usedColors.has(board[r][c]))return false;
