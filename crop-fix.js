@@ -4,21 +4,36 @@
   style.textContent=`
     .crop-wrap{position:relative;width:100%;max-width:700px;margin:12px auto;background:#2b2528;border-radius:12px;overflow:auto;display:flex;justify-content:center;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none}
     .crop-wrap canvas{display:block;margin:auto;background:#2b2528;touch-action:none;user-select:none;-webkit-user-select:none}
-    .crop-help{text-align:center;font-size:13px;color:#765b68;margin:8px 0;line-height:1.4}
     .crop-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px}
     .crop-actions button{border:0;border-radius:10px;padding:11px 15px;font-weight:700;cursor:pointer;background:#8f4960;color:white;min-height:44px;touch-action:manipulation}
     .crop-actions .crop-primary{background:#2563eb}
+    .crop-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);z-index:9999;max-width:min(92vw,520px);padding:10px 14px;border-radius:12px;background:#563747;color:white;font-size:14px;font-weight:700;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.22);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease}
+    .crop-toast.show{opacity:1;transform:translate(-50%,0)}
     @media(max-width:600px){
       .crop-wrap{max-height:62vh;min-height:260px;overflow:hidden}
       .crop-wrap canvas{max-width:none!important;max-height:none!important}
-      .crop-help{font-size:12px;padding:0 8px}
       .crop-actions button{padding:11px 12px;font-size:14px}
+      .crop-toast{bottom:16px;font-size:13px}
     }
   `;
   document.head.appendChild(style);
 
   const input=$('imageInput'), preview=$('scanPreview');
   let img=null, crop=null, drag=null, sourceScale=1;
+  let toastTimer=null;
+
+  function showToast(message,duration=3000){
+    let toast=document.querySelector('.crop-toast');
+    if(!toast){
+      toast=document.createElement('div');
+      toast.className='crop-toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent=message;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>toast.classList.remove('show'),duration);
+  }
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
   function getCanvas(){return $('cropCanvas')}
@@ -154,24 +169,22 @@
     const wrap=document.createElement('div');wrap.className='crop-wrap';
     const cc=document.createElement('canvas');cc.id='cropCanvas';cc.width=c.width;cc.height=c.height;cc.style.width=c.width+'px';cc.style.height=c.height+'px';wrap.appendChild(cc);preview.insertBefore(wrap,preview.firstChild);
 
-    const help=document.createElement('div');help.className='crop-help';
-    help.textContent='🤖 Grid auto-detected. Adjust the blue corners if needed, then tap Crop & Detect.';
-    preview.insertBefore(help,wrap.nextSibling);
-
     let actions=preview.querySelector('.crop-actions');if(actions)actions.remove();
     actions=document.createElement('div');actions.className='crop-actions';
     actions.innerHTML='<button id="resetCrop">↺ Reset</button><button id="autoCrop" class="crop-primary">🎯 Auto Grid</button><button id="cropDetect" class="crop-primary">✂️ Crop & Detect</button><button id="cancelCrop">Cancel</button>';
     preview.appendChild(actions);
 
-    if(!autoDetectOuterGrid(cc))initialCrop(cc);
+    const detected=autoDetectOuterGrid(cc);
+    if(!detected)initialCrop(cc);
     draw();
     cc.addEventListener('pointerdown',pointerDown,{passive:false});cc.addEventListener('pointermove',pointerMove,{passive:false});cc.addEventListener('pointerup',pointerUp,{passive:false});cc.addEventListener('pointercancel',pointerUp,{passive:false});cc.addEventListener('lostpointercapture',()=>{drag=null});
-    $('resetCrop').onclick=()=>{initialCrop(cc);draw()};
-    $('autoCrop').onclick=()=>{if(!autoDetectOuterGrid(cc)){initialCrop(cc);$('status').textContent='⚠️ Could not confidently detect the outer grid. Please adjust the crop manually.'}else{$('status').textContent='🎯 Main puzzle grid detected. Check the corners, then crop.'}draw()};
+    $('resetCrop').onclick=()=>{initialCrop(cc);draw();showToast('↺ Crop reset. Adjust the blue corners if needed.')};
+    $('autoCrop').onclick=()=>{if(!autoDetectOuterGrid(cc)){initialCrop(cc);showToast('⚠️ Could not confidently detect the outer grid. Adjust the crop manually.')}else{showToast('🎯 Grid auto-detected. Adjust the blue corners if needed.')}draw()};
     $('cancelCrop').onclick=()=>{preview.hidden=true};
     $('cropDetect').onclick=()=>cropAndDetect();
     preview.hidden=false;
-    $('status').textContent='Screenshot loaded. Main puzzle grid was auto-detected. Check the blue corners, then tap Crop & Detect.';
+    if(detected)showToast('🤖 Grid auto-detected. Adjust the blue corners if needed.',3500);
+    else showToast('Adjust the blue corners around the puzzle grid.',3500);
   }
 
   function cropAndDetect(){
@@ -181,7 +194,6 @@
     out.width=Math.max(1,Math.round(sw));out.height=Math.max(1,Math.round(sh));
     ctx.clearRect(0,0,out.width,out.height);ctx.drawImage(src,sx,sy,sw,sh,0,0,out.width,out.height);out.hidden=false;
     const wrap=preview.querySelector('.crop-wrap');if(wrap)wrap.remove();
-    const help=preview.querySelector('.crop-help');if(help)help.remove();
     const actions=preview.querySelector('.crop-actions');if(actions)actions.remove();
     $('status').textContent='Cropped screenshot ready. Detecting grid...';
     if(typeof window.detectBoard==='function')window.detectBoard();
