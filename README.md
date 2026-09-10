@@ -1,11 +1,19 @@
 # 🐕 Dog Puzzle Solver
 
-A 10×10 Dog Puzzle Solver built in HTML, CSS and JavaScript.
+A mobile-friendly 10×10 logic puzzle solver built with HTML, CSS and JavaScript.
+
+## Rules
+- One dog in every row
+- One dog in every column
+- Exactly one dog of each color
+- Dogs cannot touch horizontally, vertically, or diagonally
 
 ## Features
-- Solve the puzzle automatically.
-- One dog per row.
-- One dog per column.
-- One dog per color.
-- Dogs cannot touch diagonally or orthogonally.
-- Interactive color painter for creating new puzzles.
+- Automatic backtracking solver
+- Interactive 10×10 color board
+- Preloaded example puzzle
+- Mobile-friendly interface
+- No dependencies or build step
+
+## Run
+Open `index.html` in any modern browser.
