@@ -2,16 +2,17 @@
 (function(){
   const style=document.createElement('style');
   style.textContent=`
-    .crop-wrap{position:relative;width:100%;max-width:700px;margin:12px auto;background:#2b2528;border-radius:12px;overflow:auto;display:flex;justify-content:center;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none}
-    .crop-wrap canvas{display:block;margin:auto;background:#2b2528;touch-action:none;user-select:none;-webkit-user-select:none}
+    .crop-wrap{position:relative;width:100%;max-width:700px;margin:12px auto 0;background:transparent;border-radius:12px;overflow:hidden;display:flex;justify-content:center;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none}
+    .crop-wrap canvas{display:block;margin:auto;background:transparent;touch-action:none;user-select:none;-webkit-user-select:none;max-width:100%}
     .crop-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px}
     .crop-actions button{border:0;border-radius:10px;padding:11px 15px;font-weight:700;cursor:pointer;background:#8f4960;color:white;min-height:44px;touch-action:manipulation}
     .crop-actions .crop-primary{background:#2563eb}
     .crop-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,16px);z-index:9999;max-width:min(92vw,520px);padding:10px 14px;border-radius:12px;background:#563747;color:white;font-size:14px;font-weight:700;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.22);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease}
     .crop-toast.show{opacity:1;transform:translate(-50%,0)}
     @media(max-width:600px){
-      .crop-wrap{max-height:62vh;min-height:260px;overflow:hidden}
-      .crop-wrap canvas{max-width:none!important;max-height:none!important}
+      .crop-wrap{max-height:58vh;min-height:0;overflow:hidden}
+      .crop-wrap canvas{width:auto!important;max-width:100%!important;max-height:58vh!important;height:auto!important}
+      .crop-actions{margin-top:12px}
       .crop-actions button{padding:11px 12px;font-size:14px}
       .crop-toast{bottom:16px;font-size:13px}
     }
@@ -105,7 +106,7 @@
   function showCrop(image){
     img=image;
     const c=$('previewCanvas');
-    const maxW=Math.min(1100,window.innerWidth*0.92),maxH=Math.min(620,window.innerHeight*0.62);
+    const maxW=Math.min(1100,window.innerWidth*0.92),maxH=Math.min(620,window.innerHeight*0.58);
     const scale=Math.min(1,maxW/img.width,maxH/img.height);
     c.width=Math.max(1,Math.round(img.width*scale));
     c.height=Math.max(1,Math.round(img.height*scale));
