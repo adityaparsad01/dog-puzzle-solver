@@ -2,6 +2,14 @@
 
 A mobile-friendly browser-based solver for the **Logic Riddle** color-grid puzzle. Built with plain HTML, CSS and JavaScript with no dependencies or build step.
 
+## 🚀 Use the Solver
+
+Try the live solver here:
+
+👉 **https://dog-puzzle-solver.m7503345712.workers.dev/**
+
+Upload a Logic Riddle screenshot, crop the puzzle grid, let the app detect the board, and tap **🦊 Solve** to get the solution.
+
 ## 🧩 Puzzle Rules
 
 - Exactly one fox in every row
@@ -25,13 +33,14 @@ A mobile-friendly browser-based solver for the **Logic Riddle** color-grid puzzl
 
 ## 📷 Screenshot Workflow
 
-1. Tap **Scan Screenshot**.
-2. Select a Logic Riddle screenshot.
-3. Use the crop handles to select only the puzzle grid.
-4. Move or resize the crop area if needed.
-5. Tap **Crop & Detect**.
-6. Check the detected board.
-7. Tap **🦊 Solve**.
+1. Open the **[Live Solver](https://dog-puzzle-solver.m7503345712.workers.dev/)**.
+2. Tap **Scan Screenshot**.
+3. Select a Logic Riddle screenshot.
+4. Use the crop handles to select only the puzzle grid.
+5. Move or resize the crop area if needed.
+6. Tap **Crop & Detect**.
+7. Check the detected board.
+8. Tap **🦊 Solve**.
 
 Cropping is especially useful on mobile screenshots because it removes the status bar, puzzle title, hearts, instructions and other UI elements before detection.
 
