@@ -1,4 +1,4 @@
-// Mobile-friendly screenshot cropper with automatic outer-grid detection.
+// Mobile-friendly screenshot cropper. User selects the puzzle grid manually, then detection runs once.
 (function(){
   const style=document.createElement('style');
   style.textContent=`
@@ -19,8 +19,7 @@
   document.head.appendChild(style);
 
   const input=$('imageInput'), preview=$('scanPreview');
-  let img=null, crop=null, drag=null, sourceScale=1;
-  let toastTimer=null;
+  let img=null, crop=null, drag=null;
 
   function showToast(message,duration=3000){
     let toast=document.querySelector('.crop-toast');
@@ -31,8 +30,8 @@
     }
     toast.textContent=message;
     toast.classList.add('show');
-    clearTimeout(toastTimer);
-    toastTimer=setTimeout(()=>toast.classList.remove('show'),duration);
+    clearTimeout(showToast.timer);
+    showToast.timer=setTimeout(()=>toast.classList.remove('show'),duration);
   }
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
@@ -66,61 +65,6 @@
   function initialCrop(c){
     const pad=Math.round(Math.min(c.width,c.height)*.10);
     crop={x:pad,y:pad,w:c.width-pad*2,h:c.height-pad*2};
-  }
-
-  // Find the largest square-like rectangle dominated by the puzzle's colored cells.
-  // This runs before manual cropping, so the crop box opens around the main grid.
-  function autoDetectOuterGrid(c){
-    const ctx=c.getContext('2d',{willReadFrequently:true});
-    const maxDim=700, scale=Math.max(1,Math.ceil(Math.max(c.width,c.height)/maxDim));
-    const w=Math.max(1,Math.floor(c.width/scale)),h=Math.max(1,Math.floor(c.height/scale));
-    const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
-    const tctx=tmp.getContext('2d',{willReadFrequently:true});
-    tctx.drawImage(c,0,0,w,h);
-    const data=tctx.getImageData(0,0,w,h).data;
-    const row=new Float32Array(h),col=new Float32Array(w);
-
-    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-      const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
-      const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
-      const sat=mx?((mx-mn)/mx):0;
-      if(sat>.16&&mx>80&&mx-mn>28){row[y]++;col[x]++;}
-    }
-    for(let y=0;y<h;y++)row[y]/=w;
-    for(let x=0;x<w;x++)col[x]/=h;
-
-    function bestBand(values,minFrac){
-      let best=null,start=-1,sum=0;
-      for(let i=0;i<=values.length;i++){
-        const good=i<values.length&&values[i]>.055;
-        if(good&&start<0){start=i;sum=0}
-        if(good)sum+=values[i];
-        if(!good&&start>=0){
-          const end=i,len=end-start,avg=sum/len;
-          if(len>=values.length*minFrac&&(!best||avg*len>best.avg*best.len))best={start,end,len,avg};
-          start=-1;
-        }
-      }
-      return best;
-    }
-
-    const rb=bestBand(row,.18), cb=bestBand(col,.18);
-    if(!rb||!cb)return false;
-
-    let x=cb.start*scale,y=rb.start*scale;
-    let wpx=(cb.end-cb.start)*scale,hpx=(rb.end-rb.start)*scale;
-    const minSide=Math.min(wpx,hpx);
-
-    const cx=x+wpx/2,cy=y+hpx/2;
-    const side=Math.max(minSide,Math.min(c.width,c.height)*.18);
-    x=cx-side/2;y=cy-side/2;wpx=side;hpx=side;
-    const margin=Math.max(2,Math.min(c.width,c.height)*.012);
-    x=clamp(x-margin,0,c.width);y=clamp(y-margin,0,c.height);
-    wpx=Math.min(c.width-x,wpx+margin*2);hpx=Math.min(c.height-y,hpx+margin*2);
-
-    if(wpx<c.width*.22||hpx<c.height*.12)return false;
-    crop={x,y,w:wpx,h:hpx};
-    return true;
   }
 
   function point(e){
@@ -162,29 +106,35 @@
     img=image;
     const c=$('previewCanvas');
     const maxW=Math.min(1100,window.innerWidth*0.92),maxH=Math.min(620,window.innerHeight*0.62);
-    sourceScale=Math.min(1,maxW/img.width,maxH/img.height);
-    c.width=Math.max(1,Math.round(img.width*sourceScale));c.height=Math.max(1,Math.round(img.height*sourceScale));c.hidden=true;
+    const scale=Math.min(1,maxW/img.width,maxH/img.height);
+    c.width=Math.max(1,Math.round(img.width*scale));
+    c.height=Math.max(1,Math.round(img.height*scale));
+    c.hidden=true;
 
     const old=preview.querySelector('.crop-wrap');if(old)old.remove();
     const wrap=document.createElement('div');wrap.className='crop-wrap';
-    const cc=document.createElement('canvas');cc.id='cropCanvas';cc.width=c.width;cc.height=c.height;cc.style.width=c.width+'px';cc.style.height=c.height+'px';wrap.appendChild(cc);preview.insertBefore(wrap,preview.firstChild);
+    const cc=document.createElement('canvas');
+    cc.id='cropCanvas';cc.width=c.width;cc.height=c.height;
+    cc.style.width=c.width+'px';cc.style.height=c.height+'px';
+    wrap.appendChild(cc);preview.insertBefore(wrap,preview.firstChild);
 
     let actions=preview.querySelector('.crop-actions');if(actions)actions.remove();
     actions=document.createElement('div');actions.className='crop-actions';
-    actions.innerHTML='<button id="resetCrop">↺ Reset</button><button id="autoCrop" class="crop-primary">🎯 Auto Grid</button><button id="cropDetect" class="crop-primary">✂️ Crop & Detect</button><button id="cancelCrop">Cancel</button>';
+    actions.innerHTML='<button id="resetCrop">↺ Reset</button><button id="cropDetect" class="crop-primary">✂️ Crop & Detect</button><button id="cancelCrop">Cancel</button>';
     preview.appendChild(actions);
 
-    const detected=autoDetectOuterGrid(cc);
-    if(!detected)initialCrop(cc);
+    initialCrop(cc);
     draw();
-    cc.addEventListener('pointerdown',pointerDown,{passive:false});cc.addEventListener('pointermove',pointerMove,{passive:false});cc.addEventListener('pointerup',pointerUp,{passive:false});cc.addEventListener('pointercancel',pointerUp,{passive:false});cc.addEventListener('lostpointercapture',()=>{drag=null});
-    $('resetCrop').onclick=()=>{initialCrop(cc);draw();showToast('↺ Crop reset. Adjust the blue corners if needed.')};
-    $('autoCrop').onclick=()=>{if(!autoDetectOuterGrid(cc)){initialCrop(cc);showToast('⚠️ Could not confidently detect the outer grid. Adjust the crop manually.')}else{showToast('🎯 Grid auto-detected. Adjust the blue corners if needed.')}draw()};
+    cc.addEventListener('pointerdown',pointerDown,{passive:false});
+    cc.addEventListener('pointermove',pointerMove,{passive:false});
+    cc.addEventListener('pointerup',pointerUp,{passive:false});
+    cc.addEventListener('pointercancel',pointerUp,{passive:false});
+    cc.addEventListener('lostpointercapture',()=>{drag=null});
+    $('resetCrop').onclick=()=>{initialCrop(cc);draw();showToast('↺ Crop reset.')};
     $('cancelCrop').onclick=()=>{preview.hidden=true};
     $('cropDetect').onclick=()=>cropAndDetect();
     preview.hidden=false;
-    if(detected)showToast('🤖 Grid auto-detected. Adjust the blue corners if needed.',3500);
-    else showToast('Adjust the blue corners around the puzzle grid.',3500);
+    showToast('Adjust the blue corners around the puzzle, then tap Crop & Detect.',3500);
   }
 
   function cropAndDetect(){
@@ -192,10 +142,14 @@
     const src=$('cropCanvas'),out=$('previewCanvas'),ctx=out.getContext('2d');
     const sx=crop.x,sy=crop.y,sw=crop.w,sh=crop.h;
     out.width=Math.max(1,Math.round(sw));out.height=Math.max(1,Math.round(sh));
-    ctx.clearRect(0,0,out.width,out.height);ctx.drawImage(src,sx,sy,sw,sh,0,0,out.width,out.height);out.hidden=false;
+    ctx.clearRect(0,0,out.width,out.height);
+    ctx.drawImage(src,sx,sy,sw,sh,0,0,out.width,out.height);
+    out.hidden=true;
     const wrap=preview.querySelector('.crop-wrap');if(wrap)wrap.remove();
     const actions=preview.querySelector('.crop-actions');if(actions)actions.remove();
+    preview.hidden=true;
     $('status').textContent='Cropped screenshot ready. Detecting grid...';
+    showToast('🔍 Detecting puzzle grid...',1800);
     if(typeof window.detectBoard==='function')window.detectBoard();
   }
 
