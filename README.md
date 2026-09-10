@@ -1,19 +1,81 @@
-# 🐕 Dog Puzzle Solver
+# 🦊 Logic Riddle Fox Puzzle Solver
 
-A mobile-friendly 10×10 logic puzzle solver built with HTML, CSS and JavaScript.
+A mobile-friendly browser-based solver for the **Logic Riddle** color-grid puzzle. Built with plain HTML, CSS and JavaScript with no dependencies or build step.
 
-## Rules
-- One dog in every row
-- One dog in every column
-- Exactly one dog of each color
-- Dogs cannot touch horizontally, vertically, or diagonally
+## 🧩 Puzzle Rules
 
-## Features
-- Automatic backtracking solver
-- Interactive 10×10 color board
-- Preloaded example puzzle
-- Mobile-friendly interface
-- No dependencies or build step
+- Exactly one fox in every row
+- Exactly one fox in every column
+- Exactly one fox of each color
+- Foxes cannot touch each other, including diagonally
 
-## Run
+## ✨ Features
+
+- 🦊 Fast backtracking solver
+- 📱 Mobile-friendly responsive interface
+- 📷 Screenshot upload
+- ✂️ Interactive screenshot cropping with touch-friendly corner handles
+- 🔍 Automatic board detection
+- 🎨 Supports board sizes from **4×4 to 15×15**
+- 🖌️ Manual board painting
+- 🎯 Preloaded 10×10 example puzzle
+- 📊 Displays the final fox position for every row
+- ⚡ Runs entirely in the browser
+- 🚫 No external dependencies or build process required
+
+## 📷 Screenshot Workflow
+
+1. Tap **Scan Screenshot**.
+2. Select a Logic Riddle screenshot.
+3. Use the crop handles to select only the puzzle grid.
+4. Move or resize the crop area if needed.
+5. Tap **Crop & Detect**.
+6. Check the detected board.
+7. Tap **🦊 Solve**.
+
+Cropping is especially useful on mobile screenshots because it removes the status bar, puzzle title, hearts, instructions and other UI elements before detection.
+
+## 🧠 Solver
+
+The solver uses a backtracking search with constraints for:
+
+- Row uniqueness
+- Column uniqueness
+- Color uniqueness
+- 8-neighbor non-touching rule
+
+The solver is optimized to find the solution directly rather than adding artificial delays to the solving process.
+
+## 🛠️ Technology
+
+- HTML5
+- CSS3
+- Vanilla JavaScript
+- HTML Canvas for screenshot processing
+- Pointer Events for mobile/desktop crop interaction
+
+## 🚀 Run Locally
+
+No installation is required.
+
 Open `index.html` in any modern browser.
+
+## 📁 Project Structure
+
+```text
+.
+├── index.html
+├── style.css
+├── script.js
+├── scan-fix.js
+├── crop-fix.js
+└── README.md
+```
+
+## 🌐 Repository
+
+GitHub: https://github.com/adityaparsad01/dog-puzzle-solver
+
+## 📄 License
+
+This project is provided for personal and educational use.
