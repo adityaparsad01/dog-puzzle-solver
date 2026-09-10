@@ -10,38 +10,43 @@
 <main>
   <header class="hero">
     <div class="fox-logo" aria-hidden="true">🦊</div>
-    <div>
-      <h1>Logic Riddle</h1>
-      <p>Fox Puzzle Solver</p>
-    </div>
+    <div><h1>Logic Riddle</h1><p>Fox Puzzle Solver</p></div>
   </header>
-  <p class="intro">Choose the board size. Place exactly one fox in every row, column and color. Foxes cannot touch, including diagonally.</p>
+  <p class="intro">Upload a puzzle screenshot or paint the board. Place exactly one fox in every row, column and color. Foxes cannot touch, including diagonally.</p>
+
+  <section class="panel">
+    <div class="scan-box">
+      <input id="imageInput" type="file" accept="image/*" hidden>
+      <button id="scanButton" class="primary">📷 Scan Screenshot</button>
+      <span id="scanName">Upload a Logic Riddle screenshot and the app will detect the grid.</span>
+    </div>
+    <div id="scanPreview" class="scan-preview" hidden>
+      <canvas id="previewCanvas"></canvas>
+      <div class="scan-actions"><button id="detectButton" class="primary">🔍 Auto Detect Board</button><button id="closePreview">Cancel</button></div>
+    </div>
+  </section>
 
   <section class="panel">
     <div class="size-control">
       <label for="size">Board size</label>
       <select id="size">
-        <option value="4">4 × 4</option><option value="5">5 × 5</option>
-        <option value="6">6 × 6</option><option value="7">7 × 7</option>
-        <option value="8">8 × 8</option><option value="9">9 × 9</option>
-        <option value="10" selected>10 × 10</option><option value="11">11 × 11</option>
-        <option value="12">12 × 12</option><option value="13">13 × 13</option>
-        <option value="14">14 × 14</option><option value="15">15 × 15</option>
+        <option value="4">4 × 4</option><option value="5">5 × 5</option><option value="6">6 × 6</option>
+        <option value="7">7 × 7</option><option value="8">8 × 8</option><option value="9">9 × 9</option>
+        <option value="10" selected>10 × 10</option><option value="11">11 × 11</option><option value="12">12 × 12</option>
+        <option value="13">13 × 13</option><option value="14">14 × 14</option><option value="15">15 × 15</option>
       </select>
       <button id="newBoard">New Board</button>
     </div>
     <div class="controls">
-      <button id="solve">🦊 Solve</button>
-      <button id="clearDogs">Clear Foxes</button>
-      <button id="example">Load 10×10 Example</button>
-      <button id="clearBoard">Clear Board</button>
+      <button id="solve">🦊 Solve</button><button id="clearDogs">Clear Foxes</button>
+      <button id="example">Load 10×10 Example</button><button id="clearBoard">Clear Board</button>
     </div>
     <div id="legend" class="legend"></div>
   </section>
 
   <section class="panel board-panel">
     <div id="grid" class="grid"></div>
-    <div id="status" class="status">Paint the board, then press Solve.</div>
+    <div id="status" class="status">Paint the board, or scan a screenshot.</div>
     <pre id="solution"></pre>
   </section>
 </main>
