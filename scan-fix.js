@@ -47,5 +47,4 @@
     size=n;$('size').value=String(n);board=detected;dogs=Array(n).fill(-1);selected=0;$('scanPreview').hidden=true;$('status').textContent=`📷 Screenshot scanned successfully. Detected ${n}×${n}. Check the colors, then press Solve.`;legend();render();
   }
   window.detectBoard=detect;
-  $('detectButton').onclick=detect;
 })();
