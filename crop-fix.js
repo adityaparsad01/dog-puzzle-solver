@@ -1,4 +1,4 @@
-// Mobile-friendly screenshot cropper. User selects the puzzle grid manually, then detection runs once.
+// Mobile-friendly screenshot cropper. The full screenshot stays visible; only the crop boundary is highlighted.
 (function(){
   const style=document.createElement('style');
   style.textContent=`
@@ -13,7 +13,7 @@
   `;
   document.head.appendChild(style);
 
-  const input=$('imageInput'),preview=$('cropPreview');
+  const input=$('imageInput'), preview=$('cropPreview');
   let img=null, crop=null, drag=null;
 
   function showToast(message,duration=3000){
@@ -27,11 +27,9 @@
   function draw(){
     const c=getCanvas();if(!c||!img||!crop)return;
     const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);
-    ctx.fillStyle='rgba(0,0,0,.50)';
-    ctx.fillRect(0,0,c.width,crop.y);ctx.fillRect(0,crop.y,crop.x,crop.h);ctx.fillRect(crop.x+crop.w,crop.y,c.width-crop.x-crop.w,crop.h);ctx.fillRect(0,crop.y+crop.h,c.width,c.height-crop.y-crop.h);
+    // Keep the complete screenshot visible. Do not darken the area outside the crop.
     ctx.strokeStyle='#ff2b2b';ctx.lineWidth=Math.max(4,c.width/180);ctx.strokeRect(crop.x,crop.y,crop.w,crop.h);
-    const hs=Math.max(22,c.width/22);
-    const pts=[[crop.x,crop.y],[crop.x+crop.w,crop.y],[crop.x,crop.y+crop.h],[crop.x+crop.w,crop.y+crop.h]];
+    const hs=Math.max(22,c.width/22),pts=[[crop.x,crop.y],[crop.x+crop.w,crop.y],[crop.x,crop.y+crop.h],[crop.x+crop.w,crop.y+crop.h]];
     for(const [x,y] of pts){ctx.beginPath();ctx.arc(x,y,hs/2,0,Math.PI*2);ctx.fillStyle='#ff2b2b';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke()}
   }
 
