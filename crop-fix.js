@@ -64,8 +64,13 @@
   }
 
   function initialCrop(c){
-    const pad=Math.round(Math.min(c.width,c.height)*.10);
-    crop={x:pad,y:pad,w:c.width-pad*2,h:c.height-pad*2};
+    // The old crop used 10% of the image's short side as padding. On portrait
+    // phone screenshots that can cut off the left/right puzzle columns because
+    // the board is usually almost the full screen width. Keep a small, symmetric
+    // safety margin instead so the complete grid reaches the detector.
+    const padX=Math.round(c.width*.025);
+    const padY=Math.round(c.height*.025);
+    crop={x:padX,y:padY,w:c.width-padX*2,h:c.height-padY*2};
   }
 
   function point(e){
