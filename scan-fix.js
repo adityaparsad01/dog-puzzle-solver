@@ -1,14 +1,11 @@
 // Dynamic screenshot detector for Logic Riddle.
-// Board size is inferred from the screenshot. Region count is validated
-// independently from color count, so repeated colors are supported too.
+// Uses row/column projections instead of colored-component clustering.
+// This is important because the board contains a large pale-green region.
 (function(){
   const hexRgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   const rgbDist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
 
   function borderBackground(data,w,h){
-    // The app uses a warm beige page background while the board contains
-    // white gaps. Picking the brightest border pixel misclassifies the page.
-    // Use the dominant quantized border color instead.
     const vals=[];
     const step=Math.max(1,Math.floor(Math.min(w,h)/100));
     for(let x=0;x<w;x+=step){
@@ -17,20 +14,44 @@
       vals.push([data[i],data[i+1],data[i+2]]);
     }
     for(let y=0;y<h;y+=step){
-      let i=(y*w)*4;
+      let i=y*w*4;
       vals.push([data[i],data[i+1],data[i+2]]);
       i=(y*w+w-1)*4;
       vals.push([data[i],data[i+1],data[i+2]]);
     }
     const counts=new Map();
     for(const v of vals){
-      const q=v.map(x=>Math.round(x/5)*5);
-      const key=q.join(',');
+      const q=v.map(x=>Math.round(x/5)*5),key=q.join(',');
       counts.set(key,(counts.get(key)||0)+1);
     }
-    let bestKey='',bestCount=-1;
-    for(const [key,count] of counts)if(count>bestCount){bestKey=key;bestCount=count}
-    return bestKey.split(',').map(Number);
+    let best='',count=-1;
+    for(const [key,n] of counts)if(n>count){best=key;count=n}
+    return best.split(',').map(Number);
+  }
+
+  function runs(values,threshold,minLen=3){
+    const out=[];let start=-1;
+    for(let i=0;i<=values.length;i++){
+      const on=i<values.length&&values[i]>=threshold;
+      if(on&&start<0)start=i;
+      if(!on&&start>=0){
+        if(i-start>=minLen)out.push({start,end:i-1,center:(start+i-1)/2});
+        start=-1;
+      }
+    }
+    return out;
+  }
+
+  function mergeRuns(rs,maxGap){
+    const out=[];
+    for(const r of rs){
+      const last=out[out.length-1];
+      if(last&&r.start-last.end-1<=maxGap){
+        last.end=r.end;
+        last.center=(last.start+last.end)/2;
+      }else out.push({...r});
+    }
+    return out;
   }
 
   function connectedRegions(board,n){
@@ -42,11 +63,9 @@
       regions[r][c]=id;
       for(let head=0;head<q.length;head++){
         const [y,x]=q[head];
-        const next=[[y-1,x],[y+1,x],[y,x-1],[y,x+1]];
-        for(const [ny,nx] of next){
+        for(const [ny,nx] of [[y-1,x],[y+1,x],[y,x-1],[y,x+1]]){
           if(ny<0||ny>=n||nx<0||nx>=n||regions[ny][nx]>=0||board[ny][nx]!==color)continue;
-          regions[ny][nx]=id;
-          q.push([ny,nx]);
+          regions[ny][nx]=id;q.push([ny,nx]);
         }
       }
       id++;
@@ -58,7 +77,7 @@
     const src=$('previewCanvas');
     if(!src||!src.width)return;
 
-    const maxW=1000;
+    const maxW=1200;
     const scale=Math.min(1,maxW/src.width);
     const w=Math.max(1,Math.round(src.width*scale));
     const h=Math.max(1,Math.round(src.height*scale));
@@ -66,129 +85,64 @@
     work.width=w;work.height=h;
     const ctx=work.getContext('2d',{willReadFrequently:true});
     ctx.drawImage(src,0,0,w,h);
-
     const data=ctx.getImageData(0,0,w,h).data;
     const bg=borderBackground(data,w,h);
     const mask=new Uint8Array(w*h);
 
-    // Detect all non-background colored pixels, including the low-saturation
-    // pale-green region used by some levels.
     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
       const i=(y*w+x)*4;
-      const rgb=[data[i],data[i+1],data[i+2]];
-      const mx=Math.max(...rgb),mn=Math.min(...rgb);
+      const r=data[i],g=data[i+1],b=data[i+2];
+      const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
       const sat=(mx-mn)/Math.max(mx,1);
-      mask[y*w+x]=(sat>.025&&rgbDist(rgb,bg)>18)?1:0;
+      mask[y*w+x]=(sat>.025&&rgbDist([r,g,b],bg)>18)?1:0;
     }
 
-    const seen=new Uint8Array(w*h);
-    const stack=new Int32Array(w*h);
-    const comps=[];
-
-    for(let sy=0;sy<h;sy++)for(let sx=0;sx<w;sx++){
-      const start=sy*w+sx;
-      if(!mask[start]||seen[start])continue;
-      let sp=0;
-      stack[sp++]=start;
-      seen[start]=1;
-      let area=0,minX=sx,maxX=sx,minY=sy,maxY=sy,sumX=0,sumY=0;
-
-      while(sp){
-        const p=stack[--sp],y=Math.floor(p/w),x=p-y*w;
-        area++;sumX+=x;sumY+=y;
-        minX=Math.min(minX,x);maxX=Math.max(maxX,x);
-        minY=Math.min(minY,y);maxY=Math.max(maxY,y);
-
-        if(x>0){const q=p-1;if(mask[q]&&!seen[q]){seen[q]=1;stack[sp++]=q}}
-        if(x+1<w){const q=p+1;if(mask[q]&&!seen[q]){seen[q]=1;stack[sp++]=q}}
-        if(y>0){const q=p-w;if(mask[q]&&!seen[q]){seen[q]=1;stack[sp++]=q}}
-        if(y+1<h){const q=p+w;if(mask[q]&&!seen[q]){seen[q]=1;stack[sp++]=q}}
-      }
-
-      const cw=maxX-minX+1,ch=maxY-minY+1;
-      const fill=area/(cw*ch),aspect=cw/ch;
-      if(area>=20&&cw>=3&&ch>=3&&aspect>.45&&aspect<2.2&&fill>.30){
-        comps.push({area,x:minX,y:minY,w:cw,h:ch,cx:sumX/area,cy:sumY/area});
-      }
+    // The puzzle rows/columns contain colored cells almost across their full
+    // width/height. UI text and icons do not form a long regular run.
+    const rowScore=new Int32Array(h),colScore=new Int32Array(w);
+    for(let y=0;y<h;y++){
+      let n=0;
+      for(let x=0;x<w;x++)n+=mask[y*w+x];
+      rowScore[y]=n;
+    }
+    for(let x=0;x<w;x++){
+      let n=0;
+      for(let y=0;y<h;y++)n+=mask[y*w+x];
+      colScore[x]=n;
     }
 
-    if(comps.length<16){
-      $('status').textContent='⚠️ Could not find enough board cells. Upload the full Logic Riddle board screenshot.';
-      return;
+    let rowRuns=runs(rowScore,Math.max(30,Math.floor(w*.45)),3);
+    let colRuns=runs(colScore,Math.max(30,Math.floor(h*.45)),3);
+    rowRuns=mergeRuns(rowRuns,4);
+    colRuns=mergeRuns(colRuns,4);
+
+    // If the crop is tight, thresholds may need to be lower.
+    if(rowRuns.length!==colRuns.length||rowRuns.length<4||rowRuns.length>12){
+      rowRuns=mergeRuns(runs(rowScore,Math.max(20,Math.floor(w*.30)),2),3);
+      colRuns=mergeRuns(runs(colScore,Math.max(20,Math.floor(h*.30)),2),3);
     }
 
-    const dims=comps.map(c=>(c.w+c.h)/2).sort((a,b)=>a-b);
-    const typical=dims[Math.floor(dims.length*.60)]||dims[Math.floor(dims.length/2)];
-    const link=typical*2.05;
-    const adj=Array.from({length:comps.length},()=>[]);
-
-    for(let i=0;i<comps.length;i++)for(let j=i+1;j<comps.length;j++){
-      if(Math.abs(comps[i].cx-comps[j].cx)<link&&Math.abs(comps[i].cy-comps[j].cy)<link){
-        adj[i].push(j);adj[j].push(i);
-      }
-    }
-
-    const used=new Uint8Array(comps.length),clusters=[];
-    for(let i=0;i<comps.length;i++){
-      if(used[i])continue;
-      const q=[i],cl=[];
-      used[i]=1;
-      while(q.length){
-        const v=q.pop();cl.push(v);
-        for(const j of adj[v])if(!used[j]){used[j]=1;q.push(j)}
-      }
-      clusters.push(cl);
-    }
-
-    clusters.sort((a,b)=>b.length-a.length);
-    const boardCluster=clusters.find(cl=>{
-      const n=Math.round(Math.sqrt(cl.length));
-      return n>=4&&n*n===cl.length;
-    })||clusters[0];
-
-    const cells=boardCluster.map(i=>comps[i]);
-    const clusterCenters=vals=>{
-      const out=[];
-      for(const v of vals.sort((a,b)=>a-b)){
-        const last=out[out.length-1];
-        if(!last||Math.abs(v-last.mean)>typical*.55)out.push({mean:v,count:1});
-        else{last.mean=(last.mean*last.count+v)/(++last.count)}
-      }
-      return out.map(x=>x.mean);
-    };
-
-    const xs=clusterCenters(cells.map(c=>c.cx));
-    const ys=clusterCenters(cells.map(c=>c.cy));
-    const n=xs.length===ys.length?xs.length:Math.min(xs.length,ys.length);
-
-    if(n<4||xs.length!==n||ys.length!==n){
-      $('status').textContent=`⚠️ Grid inference failed (${ys.length} rows × ${xs.length} columns). Try a tighter crop.`;
-      return;
-    }
-
-    const x0=xs[0],y0=ys[0];
-    const xStep=(xs[n-1]-x0)/(n-1),yStep=(ys[n-1]-y0)/(n-1);
-    if(!Number.isFinite(xStep)||!Number.isFinite(yStep)||xStep<=0||yStep<=0){
-      $('status').textContent='⚠️ Could not determine grid spacing. Try a tighter crop.';
+    const n=rowRuns.length;
+    if(n<4||n>12||colRuns.length!==n){
+      $('status').textContent=`⚠️ Grid inference failed (${rowRuns.length} rows × ${colRuns.length} columns). Crop the complete puzzle grid.`;
       return;
     }
 
     const samples=[];
     for(let r=0;r<n;r++)for(let c=0;c<n;c++){
-      const x=Math.max(0,Math.min(w-1,Math.round(x0+c*xStep)));
-      const y=Math.max(0,Math.min(h-1,Math.round(y0+r*yStep)));
+      const x=Math.round(colRuns[c].center),y=Math.round(rowRuns[r].center);
       const i=(y*w+x)*4;
       samples.push([data[i],data[i+1],data[i+2]]);
     }
 
+    // Cluster actual sampled cell colors. Separate regions can share a color.
     const palette=[];
     for(const rgb of samples){
       let found=-1;
       for(let k=0;k<palette.length;k++)if(rgbDist(rgb,palette[k].rgb)<32){found=k;break}
       if(found<0)palette.push({rgb:rgb.slice(),count:1});
       else{
-        const p=palette[found];
-        p.count++;
+        const p=palette[found];p.count++;
         p.rgb=p.rgb.map((v,k)=>Math.round((v*(p.count-1)+rgb[k])/p.count));
       }
     }
@@ -209,10 +163,7 @@
 
     const board=samples.map(rgb=>{
       let best=0,bd=Infinity;
-      palette.forEach((p,k)=>{
-        const d=rgbDist(rgb,p.rgb);
-        if(d<bd){bd=d;best=k}
-      });
+      palette.forEach((p,k)=>{const d=rgbDist(rgb,p.rgb);if(d<bd){bd=d;best=k}});
       return best;
     });
 
