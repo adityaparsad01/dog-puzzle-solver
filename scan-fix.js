@@ -1,135 +1,126 @@
-// Dynamic screenshot detector for Logic Riddle.
-// Detects the regular colored-cell grid from row/column projections.
+/* Tray-first detector for Logic Riddle. Detect the board container, then its cells. */
 (function(){
-  const hexRgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
-  const rgbDist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
 
-  function borderBackground(data,w,h){
-    const vals=[];
-    const step=Math.max(1,Math.floor(Math.min(w,h)/100));
-    for(let x=0;x<w;x+=step){
-      vals.push([data[x*4],data[x*4+1],data[x*4+2]]);
-      const i=((h-1)*w+x)*4;vals.push([data[i],data[i+1],data[i+2]]);
+  function largestTray(data,w,h){
+    const m=new Uint8Array(w*h);
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+      m[y*w+x]=(r>248&&g>248&&b>248&&Math.max(r,g,b)-Math.min(r,g,b)<8)?1:0;
     }
-    for(let y=0;y<h;y+=step){
-      let i=y*w*4;vals.push([data[i],data[i+1],data[i+2]]);
-      i=(y*w+w-1)*4;vals.push([data[i],data[i+1],data[i+2]]);
+    const seen=new Uint8Array(w*h),q=new Int32Array(w*h);let best=null,bestArea=0;
+    for(let sy=0;sy<h;sy++)for(let sx=0;sx<w;sx++){
+      const s=sy*w+sx;if(!m[s]||seen[s])continue;
+      let head=0,tail=0,minX=sx,maxX=sx,minY=sy,maxY=sy;q[tail++]=s;seen[s]=1;
+      while(head<tail){
+        const p=q[head++],y=Math.floor(p/w),x=p-y*w;
+        minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+        if(x>0&&m[p-1]&&!seen[p-1]){seen[p-1]=1;q[tail++]=p-1}
+        if(x<w-1&&m[p+1]&&!seen[p+1]){seen[p+1]=1;q[tail++]=p+1}
+        if(y>0&&m[p-w]&&!seen[p-w]){seen[p-w]=1;q[tail++]=p-w}
+        if(y<h-1&&m[p+w]&&!seen[p+w]){seen[p+w]=1;q[tail++]=p+w}
+      }
+      if(tail>bestArea&&maxX-minX>250&&maxY-minY>250){bestArea=tail;best={x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1};}
     }
-    const counts=new Map();
-    for(const v of vals){const q=v.map(x=>Math.round(x/5)*5),key=q.join(',');counts.set(key,(counts.get(key)||0)+1)}
-    let best='',count=-1;
-    for(const [key,n] of counts)if(n>count){best=key;count=n}
-    return best.split(',').map(Number);
+    return best;
   }
 
-  function runs(values,threshold,minLen=3){
-    const out=[];let start=-1;
-    for(let i=0;i<=values.length;i++){
-      const on=i<values.length&&values[i]>=threshold;
-      if(on&&start<0)start=i;
-      if(!on&&start>=0){
-        if(i-start>=minLen)out.push({start,end:i-1,center:(start+i-1)/2});
-        start=-1;
-      }
+  function runs(score,threshold){
+    const out=[];let s=-1;
+    for(let i=0;i<=score.length;i++){
+      const on=i<score.length&&score[i]>=threshold;
+      if(on&&s<0)s=i;
+      if(!on&&s>=0){if(i-s>=4)out.push([s,i-1]);s=-1;}
     }
     return out;
   }
 
-  function connectedRegions(board,n){
-    const regions=Array.from({length:n},()=>Array(n).fill(-1));let id=0;
+  function regions(board,n){
+    const reg=Array.from({length:n},()=>Array(n).fill(-1));let id=0;
     for(let r=0;r<n;r++)for(let c=0;c<n;c++){
-      if(regions[r][c]>=0)continue;
-      const color=board[r][c],q=[[r,c]];regions[r][c]=id;
-      for(let head=0;head<q.length;head++){
-        const [y,x]=q[head];
-        for(const [ny,nx] of [[y-1,x],[y+1,x],[y,x-1],[y,x+1]]){
-          if(ny<0||ny>=n||nx<0||nx>=n||regions[ny][nx]>=0||board[ny][nx]!==color)continue;
-          regions[ny][nx]=id;q.push([ny,nx]);
+      if(reg[r][c]>=0)continue;
+      const color=board[r][c],q=[[r,c]];reg[r][c]=id;
+      for(let h=0;h<q.length;h++){
+        const [y,x]=q[h];
+        for(const [dy,dx] of [[-1,0],[1,0],[0,-1],[0,1]]){
+          const ny=y+dy,nx=x+dx;
+          if(ny>=0&&ny<n&&nx>=0&&nx<n&&reg[ny][nx]<0&&board[ny][nx]===color){reg[ny][nx]=id;q.push([ny,nx]);}
         }
       }
       id++;
     }
-    return {regions,count:id};
+    return {regions:reg,count:id};
   }
 
   function detect(){
-    const src=$('previewCanvas');if(!src||!src.width)return;
-    const scale=Math.min(1,1200/src.width);
-    const w=Math.max(1,Math.round(src.width*scale)),h=Math.max(1,Math.round(src.height*scale));
-    const work=document.createElement('canvas');work.width=w;work.height=h;
-    const ctx=work.getContext('2d',{willReadFrequently:true});ctx.drawImage(src,0,0,w,h);
-    const data=ctx.getImageData(0,0,w,h).data,bg=borderBackground(data,w,h),mask=new Uint8Array(w*h);
+    const src=$('previewCanvas');
+    if(!src||!src.width){if($('status'))$('status').textContent='⚠️ Upload a screenshot first.';return;}
+    const w=src.width,h=src.height,ctx=src.getContext('2d',{willReadFrequently:true});
+    const data=ctx.getImageData(0,0,w,h).data;
+    const tray=largestTray(data,w,h);
+    if(!tray){$('status').textContent='⚠️ Board tray not found. Crop around the complete puzzle board.';return;}
 
-    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-      const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2],mx=Math.max(r,g,b),mn=Math.min(r,g,b);
-      const sat=(mx-mn)/Math.max(mx,1);
-      mask[y*w+x]=(sat>.025&&rgbDist([r,g,b],bg)>18)?1:0;
+    // The white tray gives us a stable coordinate system. Detect every colored
+    // tile by its distance from white, not by saturation or page background.
+    const mask=new Uint8Array(tray.w*tray.h);
+    for(let y=0;y<tray.h;y++)for(let x=0;x<tray.w;x++){
+      const i=((tray.y+y)*w+(tray.x+x))*4;
+      mask[y*tray.w+x]=(dist([data[i],data[i+1],data[i+2]],[255,255,255])>18)?1:0;
     }
+    const rs=new Int32Array(tray.h),cs=new Int32Array(tray.w);
+    for(let y=0;y<tray.h;y++)for(let x=0;x<tray.w;x++)if(mask[y*tray.w+x]){rs[y]++;cs[x]++;}
 
-    // Find row bands first. Every puzzle row contains colored cells across
-    // almost the complete board width, unlike surrounding UI elements.
-    const rowScore=new Int32Array(h);
-    for(let y=0;y<h;y++){let count=0;for(let x=0;x<w;x++)count+=mask[y*w+x];rowScore[y]=count}
-    let rowRuns=runs(rowScore,Math.max(30,Math.floor(w*.45)),3);
-    if(rowRuns.length<4||rowRuns.length>12)rowRuns=runs(rowScore,Math.max(20,Math.floor(w*.30)),2);
+    // Each row/column is a solid tile band separated by a narrow white gap.
+    // We deliberately do NOT merge nearby runs because the gaps are the grid.
+    let rows=[],cols=[];
+    for(const frac of [.30,.20,.10,.05]){rows=runs(rs,Math.max(5,Math.floor(tray.w*frac)));if(rows.length>=4&&rows.length<=12)break;}
+    if(rows.length<4||rows.length>12){$('status').textContent=`⚠️ Could not detect grid rows (${rows.length}).`;return;}
+    const n=rows.length;
+    for(const frac of [.30,.20,.10,.05]){cols=runs(cs,Math.max(5,Math.floor(tray.h*frac)));if(cols.length===n)break;}
+    if(cols.length!==n){$('status').textContent=`⚠️ Grid mismatch: ${n} rows × ${cols.length} columns.`;return;}
 
-    const n=rowRuns.length;
-    if(n<4||n>12){
-      $('status').textContent=`⚠️ Could not detect puzzle rows (${n}). Crop the complete puzzle grid.`;return;
-    }
-
-    // Restrict column analysis to the board rows. This avoids browser chrome,
-    // text and other colored UI from producing false columns.
-    const yMin=rowRuns[0].start,yMax=rowRuns[rowRuns.length-1].end,boardH=yMax-yMin+1;
-    const colScore=new Int32Array(w);
-    for(let x=0;x<w;x++){let count=0;for(let y=yMin;y<=yMax;y++)count+=mask[y*w+x];colScore[x]=count}
-    let colRuns=runs(colScore,Math.max(15,Math.floor(boardH*.45)),3);
-    if(colRuns.length!==n)colRuns=runs(colScore,Math.max(10,Math.floor(boardH*.30)),2);
-
-    if(colRuns.length!==n){
-      $('status').textContent=`⚠️ Grid inference failed (${n} rows × ${colRuns.length} columns). Crop the complete puzzle grid.`;return;
-    }
-
+    // Sample the center of each tile. These RGB values are the actual game
+    // colors, so connected regions can be reconstructed after sampling.
     const samples=[];
     for(let r=0;r<n;r++)for(let c=0;c<n;c++){
-      const x=Math.round(colRuns[c].center),y=Math.round(rowRuns[r].center),i=(y*w+x)*4;
-      samples.push([data[i],data[i+1],data[i+2]]);
-    }
-
-    const palette=[];
-    for(const rgb of samples){
-      let found=-1;
-      for(let k=0;k<palette.length;k++)if(rgbDist(rgb,palette[k].rgb)<32){found=k;break}
-      if(found<0)palette.push({rgb:rgb.slice(),count:1});
-      else{
-        const p=palette[found];p.count++;
-        p.rgb=p.rgb.map((v,k)=>Math.round((v*(p.count-1)+rgb[k])/p.count));
+      const [ya,yb]=rows[r],[xa,xb]=cols[c],cx=Math.round((xa+xb)/2),cy=Math.round((ya+yb)/2);
+      let vals=[];
+      const rx=Math.max(2,Math.floor((xb-xa+1)*.18)),ry=Math.max(2,Math.floor((yb-ya+1)*.18));
+      for(let y=Math.max(ya,cy-ry);y<=Math.min(yb,cy+ry);y++)for(let x=Math.max(xa,cx-rx);x<=Math.min(xb,cx+rx);x++){
+        const i=((tray.y+y)*w+(tray.x+x))*4;vals.push([data[i],data[i+1],data[i+2]]);
       }
+      const avg=[0,1,2].map(k=>Math.round(vals.reduce((s,v)=>s+v[k],0)/vals.length));
+      samples.push(avg);
     }
 
-    const toHex=rgb=>`#${rgb.map(v=>v.toString(16).padStart(2,'0')).join('')}`;
-    const names=[],usedNames=new Set();
-    for(const p of palette){
-      let bestName='',bestDist=Infinity;
-      baseColors.forEach(c=>{const d=rgbDist(p.rgb,hexRgb(c[1]));if(d<bestDist){bestDist=d;bestName=c[0]}});
-      if(bestDist>55)bestName=`Color ${names.length+1}`;
-      if(usedNames.has(bestName))bestName=`Color ${names.length+1}`;
-      usedNames.add(bestName);names.push([bestName,toHex(p.rgb)]);
-    }
-
-    const board=samples.map(rgb=>{
-      let best=0,bd=Infinity;
-      palette.forEach((p,k)=>{const d=rgbDist(rgb,p.rgb);if(d<bd){bd=d;best=k}});
-      return best;
+    // Tight clustering. Colors in the game are flat fills; using a small
+    // threshold preserves visually similar but distinct region colors.
+    const palette=[];
+    const ids=samples.map(rgb=>{
+      let k=-1,bd=Infinity;
+      for(let i=0;i<palette.length;i++){const d=dist(rgb,palette[i]);if(d<bd){bd=d;k=i;}}
+      if(k<0||bd>20){palette.push(rgb.slice());return palette.length-1;}
+      palette[k]=palette[k].map((v,i)=>Math.round((v+rgb[i])/2));return k;
     });
+    const board=Array.from({length:n},(_,r)=>ids.slice(r*n,(r+1)*n));
+    let rd=regions(board,n);
 
-    const regionData=connectedRegions(board,n);
-    if(regionData.count!==n){
-      $('status').textContent=`⚠️ Detected ${n}×${n}, but found ${regionData.count} connected regions. Try a tighter crop with the complete board.`;return;
+    // If anti-aliasing changed a few center samples, classify all samples again
+    // against stable palette means before rejecting the screenshot.
+    if(rd.count!==n){
+      const ids2=samples.map(rgb=>{let k=0,bd=Infinity;palette.forEach((p,i)=>{const d=dist(rgb,p);if(d<bd){bd=d;k=i;}});return k;});
+      const board2=Array.from({length:n},(_,r)=>ids2.slice(r*n,(r+1)*n)),rd2=regions(board2,n);
+      if(rd2.count===n)rd=rd2,rd.board=board2;
     }
+    if(rd.count!==n){$('status').textContent=`⚠️ Detected ${n}×${n}, but found ${rd.count} regions. Crop the complete board.`;return;}
 
-    window.applyDetectedBoard(n,Array.from({length:n},(_,r)=>board.slice(r*n,(r+1)*n)),names,regionData.regions);
+    const finalBoard=rd.board||board;
+    const toHex=rgb=>`#${rgb.map(v=>v.toString(16).padStart(2,'0')).join('')}`;
+    const names=palette.map((p,i)=>[`Color ${i+1}`,toHex(p)]);
+    window.applyDetectedBoard(n,finalBoard,names,rd.regions);
+    $('status').textContent=`✓ Detected ${n}×${n} board with ${n} regions.`;
   }
-
   window.detectBoard=detect;
 })();
