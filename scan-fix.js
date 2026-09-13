@@ -1,6 +1,5 @@
 // Dynamic screenshot detector for Logic Riddle.
-// Uses row/column projections instead of colored-component clustering.
-// This is important because the board contains a large pale-green region.
+// Detects the regular colored-cell grid first, then samples each cell center.
 (function(){
   const hexRgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   const rgbDist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
@@ -47,8 +46,7 @@
     for(const r of rs){
       const last=out[out.length-1];
       if(last&&r.start-last.end-1<=maxGap){
-        last.end=r.end;
-        last.center=(last.start+last.end)/2;
+        last.end=r.end;last.center=(last.start+last.end)/2;
       }else out.push({...r});
     }
     return out;
@@ -77,54 +75,52 @@
     const src=$('previewCanvas');
     if(!src||!src.width)return;
 
-    const maxW=1200;
-    const scale=Math.min(1,maxW/src.width);
+    const maxW=1200,scale=Math.min(1,maxW/src.width);
     const w=Math.max(1,Math.round(src.width*scale));
     const h=Math.max(1,Math.round(src.height*scale));
-    const work=document.createElement('canvas');
-    work.width=w;work.height=h;
+    const work=document.createElement('canvas');work.width=w;work.height=h;
     const ctx=work.getContext('2d',{willReadFrequently:true});
     ctx.drawImage(src,0,0,w,h);
     const data=ctx.getImageData(0,0,w,h).data;
-    const bg=borderBackground(data,w,h);
-    const mask=new Uint8Array(w*h);
+    const bg=borderBackground(data,w,h),mask=new Uint8Array(w*h);
 
     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-      const i=(y*w+x)*4;
-      const r=data[i],g=data[i+1],b=data[i+2];
+      const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
       const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
       const sat=(mx-mn)/Math.max(mx,1);
       mask[y*w+x]=(sat>.025&&rgbDist([r,g,b],bg)>18)?1:0;
     }
 
-    // The puzzle rows/columns contain colored cells almost across their full
-    // width/height. UI text and icons do not form a long regular run.
-    const rowScore=new Int32Array(h),colScore=new Int32Array(w);
-    for(let y=0;y<h;y++){
-      let n=0;
-      for(let x=0;x<w;x++)n+=mask[y*w+x];
-      rowScore[y]=n;
-    }
-    for(let x=0;x<w;x++){
-      let n=0;
-      for(let y=0;y<h;y++)n+=mask[y*w+x];
-      colScore[x]=n;
-    }
-
-    let rowRuns=runs(rowScore,Math.max(30,Math.floor(w*.45)),3);
-    let colRuns=runs(colScore,Math.max(30,Math.floor(h*.45)),3);
-    rowRuns=mergeRuns(rowRuns,4);
-    colRuns=mergeRuns(colRuns,4);
-
-    // If the crop is tight, thresholds may need to be lower.
-    if(rowRuns.length!==colRuns.length||rowRuns.length<4||rowRuns.length>12){
+    // First find the horizontal cell bands. We deliberately do this before
+    // columns because the screenshot contains unrelated UI above/below the board.
+    const rowScore=new Int32Array(h);
+    for(let y=0;y<h;y++){let n=0;for(let x=0;x<w;x++)n+=mask[y*w+x];rowScore[y]=n}
+    let rowRuns=mergeRuns(runs(rowScore,Math.max(30,Math.floor(w*.45)),3),4);
+    if(rowRuns.length<4||rowRuns.length>12)
       rowRuns=mergeRuns(runs(rowScore,Math.max(20,Math.floor(w*.30)),2),3);
-      colRuns=mergeRuns(runs(colScore,Math.max(20,Math.floor(h*.30)),2),3);
-    }
 
     const n=rowRuns.length;
-    if(n<4||n>12||colRuns.length!==n){
-      $('status').textContent=`⚠️ Grid inference failed (${rowRuns.length} rows × ${colRuns.length} columns). Crop the complete puzzle grid.`;
+    if(n<4||n>12){
+      $('status').textContent=`⚠️ Could not detect puzzle rows (${n}). Crop the complete puzzle grid.`;
+      return;
+    }
+
+    // Now restrict column projection to the detected board rows. This prevents
+    // browser/UI content from changing the column count.
+    const yMin=rowRuns[0].start,yMax=rowRuns[rowRuns.length-1].end;
+    const boardH=yMax-yMin+1;
+    const colScore=new Int32Array(w);
+    for(let x=0;x<w;x++){
+      let count=0;
+      for(let y=yMin;y<=yMax;y++)count+=mask[y*w+x];
+      colScore[x]=count;
+    }
+    let colRuns=mergeRuns(runs(colScore,Math.max(20,Math.floor(boardH*.45)),3),4);
+    if(colRuns.length!==n)
+      colRuns=mergeRuns(runs(colScore,Math.max(15,Math.floor(boardH*.30)),2),3);
+
+    if(colRuns.length!==n){
+      $('status').textContent=`⚠️ Grid inference failed (${n} rows × ${colRuns.length} columns). Crop the complete puzzle grid.`;
       return;
     }
 
@@ -135,7 +131,7 @@
       samples.push([data[i],data[i+1],data[i+2]]);
     }
 
-    // Cluster actual sampled cell colors. Separate regions can share a color.
+    // Build a palette from actual cell-center colors. Repeated colors are allowed.
     const palette=[];
     for(const rgb of samples){
       let found=-1;
@@ -157,8 +153,7 @@
       });
       if(bestDist>55)bestName=`Color ${names.length+1}`;
       if(usedNames.has(bestName))bestName=`Color ${names.length+1}`;
-      usedNames.add(bestName);
-      names.push([bestName,toHex(p.rgb)]);
+      usedNames.add(bestName);names.push([bestName,toHex(p.rgb)]);
     }
 
     const board=samples.map(rgb=>{
