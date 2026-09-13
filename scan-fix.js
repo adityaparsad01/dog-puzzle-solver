@@ -6,6 +6,9 @@
   const rgbDist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
 
   function borderBackground(data,w,h){
+    // The app uses a warm beige page background while the board contains
+    // white gaps. Picking the brightest border pixel misclassifies the page.
+    // Use the dominant quantized border color instead.
     const vals=[];
     const step=Math.max(1,Math.floor(Math.min(w,h)/100));
     for(let x=0;x<w;x+=step){
@@ -19,7 +22,15 @@
       i=(y*w+w-1)*4;
       vals.push([data[i],data[i+1],data[i+2]]);
     }
-    return vals.reduce((best,v)=>v[0]+v[1]+v[2]>best[0]+best[1]+best[2]?v:best,vals[0]);
+    const counts=new Map();
+    for(const v of vals){
+      const q=v.map(x=>Math.round(x/5)*5);
+      const key=q.join(',');
+      counts.set(key,(counts.get(key)||0)+1);
+    }
+    let bestKey='',bestCount=-1;
+    for(const [key,count] of counts)if(count>bestCount){bestKey=key;bestCount=count}
+    return bestKey.split(',').map(Number);
   }
 
   function connectedRegions(board,n){
@@ -170,8 +181,6 @@
       samples.push([data[i],data[i+1],data[i+2]]);
     }
 
-    // Build a palette from the actual sampled cell colors. The number of
-    // colors does not need to equal N because separate regions may share a color.
     const palette=[];
     for(const rgb of samples){
       let found=-1;
