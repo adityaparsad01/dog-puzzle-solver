@@ -141,10 +141,15 @@
   function cropAndDetect(){
     if(!img||!crop)return;
     const src=$('cropCanvas'),out=$('previewCanvas'),ctx=out.getContext('2d');
-    const sx=crop.x,sy=crop.y,sw=crop.w,sh=crop.h;
+    const scaleX=img.width/src.width,scaleY=img.height/src.height;
+    const sx=crop.x*scaleX,sy=crop.y*scaleY;
+    const sw=crop.w*scaleX,sh=crop.h*scaleY;
+    // Use the original image pixels for detection. The display canvas is
+    // intentionally downscaled on mobile, which can blur the small gaps
+    // between adjacent puzzle cells and merge components.
     out.width=Math.max(1,Math.round(sw));out.height=Math.max(1,Math.round(sh));
     ctx.clearRect(0,0,out.width,out.height);
-    ctx.drawImage(src,sx,sy,sw,sh,0,0,out.width,out.height);
+    ctx.drawImage(img,sx,sy,sw,sh,0,0,out.width,out.height);
     out.hidden=true;
     const wrap=preview.querySelector('.crop-wrap');if(wrap)wrap.remove();
     const actions=preview.querySelector('.crop-actions');if(actions)actions.remove();
