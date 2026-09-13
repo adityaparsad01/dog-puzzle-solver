@@ -1,19 +1,28 @@
 // Robust screenshot detector for Logic Riddle.
-// Detects the actual colored cell rectangles first, then derives N x N from them.
+// Detects every colored cell, including the pale-green region, then derives N x N.
 (function(){
   const hexRgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
   const rgbDist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
 
+  function borderBackground(data,w,h){
+    const vals=[];
+    const step=Math.max(1,Math.floor(Math.min(w,h)/80));
+    for(let x=0;x<w;x+=step){vals.push([data[x*4],data[x*4+1],data[x*4+2]]);const i=((h-1)*w+x)*4;vals.push([data[i],data[i+1],data[i+2]])}
+    for(let y=0;y<h;y+=step){let i=(y*w)*4;vals.push([data[i],data[i+1],data[i+2]]);i=(y*w+w-1)*4;vals.push([data[i],data[i+1],data[i+2]])}
+    return vals.reduce((best,v)=>v[0]+v[1]+v[2]>best[0]+best[1]+best[2]?v:best,vals[0]);
+  }
+
   function detect(){
     const src=$('previewCanvas'); if(!src||!src.width)return;
-    const maxW=700, scale=Math.min(1,maxW/src.width), w=Math.max(1,Math.round(src.width*scale)), h=Math.max(1,Math.round(src.height*scale));
+    const maxW=900, scale=Math.min(1,maxW/src.width), w=Math.max(1,Math.round(src.width*scale)), h=Math.max(1,Math.round(src.height*scale));
     const work=document.createElement('canvas'); work.width=w; work.height=h;
     const ctx=work.getContext('2d',{willReadFrequently:true}); ctx.drawImage(src,0,0,w,h);
     const data=ctx.getImageData(0,0,w,h).data;
-    const bg=[data[0],data[1],data[2]], mask=new Uint8Array(w*h);
+    const bg=borderBackground(data,w,h), mask=new Uint8Array(w*h);
     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
       const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2],mx=Math.max(r,g,b),mn=Math.min(r,g,b),sat=(mx-mn)/Math.max(mx,1);
-      mask[y*w+x]=(sat>.10&&rgbDist([r,g,b],bg)>24)?1:0;
+      // The game's pale-green region has low saturation, so do not use the old .10 threshold.
+      mask[y*w+x]=(sat>.025&&rgbDist([r,g,b],bg)>18)?1:0;
     }
     const seen=new Uint8Array(w*h),stack=new Int32Array(w*h),comps=[];
     for(let sy=0;sy<h;sy++)for(let sx=0;sx<w;sx++){
@@ -26,9 +35,9 @@
         if(y+1<h){const q=p+w;if(mask[q]&&!seen[q]){seen[q]=1;stack[sp++]=q}}
       }
       const cw=maxX-minX+1,ch=maxY-minY+1,fill=area/(cw*ch),aspect=cw/ch;
-      if(area>=180&&cw>=12&&ch>=12&&cw<=110&&ch<=110&&aspect>.72&&aspect<1.35&&fill>.45)comps.push({area,x:minX,y:minY,w:cw,h:ch,cx:sumX/area,cy:sumY/area});
+      if(area>=180&&cw>=12&&ch>=12&&cw<=120&&ch<=120&&aspect>.72&&aspect<1.35&&fill>.45)comps.push({area,x:minX,y:minY,w:cw,h:ch,cx:sumX/area,cy:sumY/area});
     }
-    if(comps.length<16){$('status').textContent='⚠️ Could not find enough colored cells. Upload the full Logic Riddle board screenshot.';return}
+    if(comps.length<16){$('status').textContent='⚠️ Could not find enough board cells. Upload the full Logic Riddle board screenshot.';return}
     const dims=comps.map(c=>(c.w+c.h)/2).sort((a,b)=>a-b),typical=dims[Math.floor(dims.length/2)],link=typical*2.05;
     const adj=Array.from({length:comps.length},()=>[]);
     for(let i=0;i<comps.length;i++)for(let j=i+1;j<comps.length;j++)if(Math.abs(comps[i].cx-comps[j].cx)<link&&Math.abs(comps[i].cy-comps[j].cy)<link){adj[i].push(j);adj[j].push(i)}
@@ -36,15 +45,45 @@
     for(let i=0;i<comps.length;i++){if(used[i])continue;const q=[i],cl=[];used[i]=1;while(q.length){const v=q.pop();cl.push(v);for(const j of adj[v])if(!used[j]){used[j]=1;q.push(j)}}clusters.push(cl)}
     clusters.sort((a,b)=>b.length-a.length);
     const boardCluster=clusters.find(cl=>{const n=Math.round(Math.sqrt(cl.length));return n>=4&&n<=15&&n*n===cl.length})||clusters[0];
-    const cells=boardCluster.map(i=>comps[i]);cells.sort((a,b)=>a.cy-b.cy||a.cx-b.cx);
-    const rowGap=typical*.55,rows=[];
-    for(const cell of cells){let row=rows[rows.length-1];if(!row||Math.abs(cell.cy-row.cy)>rowGap){row={cy:cell.cy,cells:[]};rows.push(row)}row.cells.push(cell);row.cy=row.cells.reduce((s,c)=>s+c.cy,0)/row.cells.length}
-    rows.forEach(r=>r.cells.sort((a,b)=>a.cx-b.cx));
-    const n=rows.length,counts=rows.map(r=>r.cells.length);
-    if(n<4||n>15||counts.some(v=>v!==n)){$('status').textContent=`⚠️ Grid detected, but rows are inconsistent (${n} rows: ${counts.join(', ')}). Upload the complete board screenshot.`;return}
-    const palette=baseColors.slice(0,n);
-    const detected=rows.map(row=>row.cells.map(cell=>{const x=Math.max(0,Math.min(w-1,Math.round(cell.cx))),y=Math.max(0,Math.min(h-1,Math.round(cell.cy))),i=(y*w+x)*4,rgb=[data[i],data[i+1],data[i+2]];let best=0,bd=Infinity;palette.forEach((p,k)=>{const d=rgbDist(rgb,hexRgb(p[1]));if(d<bd){bd=d;best=k}});return best}));
-    size=n;$('size').value=String(n);board=detected;dogs=Array(n).fill(-1);selected=0;$('scanPreview').hidden=true;$('status').textContent=`📷 Screenshot scanned successfully. Detected ${n}×${n}. Check the colors, then press Solve.`;legend();render();
+    let cells=boardCluster.map(i=>comps[i]);
+    // If the pale region was missed at an edge, recover the full lattice from detected cells.
+    let xs=[],ys=[];
+    const clusterCenters=(vals)=>{const out=[];for(const v of vals.sort((a,b)=>a-b)){const last=out[out.length-1];if(!last||Math.abs(v-last.mean)>typical*.55)out.push({mean:v,count:1});else{last.mean=(last.mean*last.count+v)/(++last.count)}}return out.map(x=>x.mean)};
+    xs=clusterCenters(cells.map(c=>c.cx));ys=clusterCenters(cells.map(c=>c.cy));
+    let n=rowsCount(ys,xs);
+    function rowsCount(yc,xc){const n1=yc.length,n2=xc.length;return n1===n2&&n1>=4&&n1<=15?n1:Math.max(n1,n2)}
+    if(n<4||n>15){$('status').textContent='⚠️ Could not determine the puzzle grid. Try a tighter crop around the board.';return}
+    // Build a complete grid from the inferred lattice centers.
+    const minX=xs.length?Math.min(...xs):0,maxX=xs.length?Math.max(...xs):w;
+    const minY=ys.length?Math.min(...ys):0,maxY=ys.length?Math.max(...ys):h;
+    const x0=xs.length?xs[0]:minX,xN=xs.length?xs[xs.length-1]:maxX,y0=ys.length?ys[0]:minY,yN=ys.length?ys[ys.length-1]:maxY;
+    const xStep=xs.length>1?(xN-x0)/(xs.length-1):typical*1.05,yStep=ys.length>1?(yN-y0)/(ys.length-1):typical*1.05;
+    if(xs.length!==n||ys.length!==n){$('status').textContent=`⚠️ Grid inference failed (${ys.length} rows × ${xs.length} columns). Try a tighter crop.`;return}
+    const samples=[];
+    for(let r=0;r<n;r++)for(let c=0;c<n;c++){
+      const x=Math.max(0,Math.min(w-1,Math.round(y0*0+x0+c*xStep))), y=Math.max(0,Math.min(h-1,Math.round(y0+r*yStep)));
+      const i=(y*w+x)*4;samples.push([data[i],data[i+1],data[i+2]]);
+    }
+    // Cluster the sampled cell colors. This preserves the pale-green 11th region.
+    const palette=[];
+    for(const rgb of samples){
+      let found=-1;for(let k=0;k<palette.length;k++)if(rgbDist(rgb,palette[k].rgb)<28){found=k;break}
+      if(found<0)palette.push({rgb:rgb.slice(),count:1});else{const p=palette[found];p.count++;p.rgb=p.rgb.map((v,k)=>Math.round((v*(p.count-1)+rgb[k])/p.count))}
+    }
+    palette.sort((a,b)=>b.count-a.count);
+    if(palette.length!==n){$('status').textContent=`⚠️ Detected ${palette.length} color regions for a ${n}×${n} board. Expected ${n}.`;return}
+    const toHex=rgb=>`#${rgb.map(v=>v.toString(16).padStart(2,'0')).join('')}`;
+    const names=[];const usedNames=new Set();
+    for(const p of palette){
+      let bestName='';let bestDist=Infinity;
+      baseColors.forEach(c=>{const d=rgbDist(p.rgb,hexRgb(c[1]));if(d<bestDist){bestDist=d;bestName=c[0]}});
+      if(bestDist>55)bestName='Mint';
+      if(usedNames.has(bestName))bestName=`Color ${names.length+1}`;
+      usedNames.add(bestName);names.push([bestName,toHex(p.rgb)]);
+    }
+    detectedPalette=names;
+    const detected=samples.map(rgb=>{let best=0,bd=Infinity;palette.forEach((p,k)=>{const d=rgbDist(rgb,p.rgb);if(d<bd){bd=d;best=k}});return best});
+    size=n;$('size').value=String(n);board=Array.from({length:n},(_,r)=>detected.slice(r*n,(r+1)*n));dogs=Array(n).fill(-1);selected=0;$('scanPreview').hidden=true;$('status').textContent=`📷 Screenshot scanned successfully. Detected ${n}×${n} and ${n} color regions. Check the board, then press Solve.`;legend();render();
   }
   window.detectBoard=detect;
 })();
