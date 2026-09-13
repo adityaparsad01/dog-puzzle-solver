@@ -16,7 +16,7 @@
     </div>
   </header>
 
-  <p class="intro">Upload a puzzle screenshot or paint the board. Place exactly one fox in every row, column and color. Foxes cannot touch, including diagonally.</p>
+  <p class="intro">Upload a puzzle screenshot or paint the board. The scanner automatically detects the board size and connected colored regions. Place exactly one fox in every row, column and region. Foxes cannot touch, including diagonally.</p>
 
   <section class="panel scan-panel">
     <div class="scan-box">
@@ -32,12 +32,7 @@
   <section class="panel controls-panel">
     <div class="size-control">
       <label for="size">Board size</label>
-      <select id="size">
-        <option value="4">4 × 4</option><option value="5">5 × 5</option><option value="6">6 × 6</option>
-        <option value="7">7 × 7</option><option value="8">8 × 8</option><option value="9">9 × 9</option>
-        <option value="10" selected>10 × 10</option><option value="11">11 × 11</option><option value="12">12 × 12</option>
-        <option value="13">13 × 13</option><option value="14">14 × 14</option><option value="15">15 × 15</option>
-      </select>
+      <input id="size" type="number" min="2" step="1" value="10" inputmode="numeric" aria-label="Board size">
       <button id="newBoard">New Board</button>
     </div>
     <div class="controls">
