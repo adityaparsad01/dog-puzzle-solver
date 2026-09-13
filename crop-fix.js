@@ -37,7 +37,58 @@
     for(const [x,y] of pts){ctx.beginPath();ctx.arc(x,y,hs/2,0,Math.PI*2);ctx.fillStyle='#ff2b2b';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke()}
   }
 
-  function initialCrop(c){const padX=Math.round(c.width*.025),padY=Math.round(c.height*.025);crop={x:padX,y:padY,w:c.width-padX*2,h:c.height-padY*2}}
+  // Detect the actual colored puzzle grid before showing the crop handles.
+  // We look for a long sequence of similarly-sized horizontal color bands,
+  // then use the matching vertical bands inside that row range.
+  function autoDetectCrop(c){
+    const ctx=c.getContext('2d',{willReadFrequently:true});
+    ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(img,0,0,c.width,c.height);
+    const w=c.width,h=c.height,d=ctx.getImageData(0,0,w,h).data;
+    const bg=[d[0],d[1],d[2]], mask=new Uint8Array(w*h);
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const i=(y*w+x)*4,r=d[i],g=d[i+1],b=d[i+2],mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+      const sat=(mx-mn)/Math.max(mx,1),dist=Math.hypot(r-bg[0],g-bg[1],b-bg[2]);
+      mask[y*w+x]=(sat>.06&&dist>28)?1:0;
+    }
+    const rowScore=new Int32Array(h);
+    for(let y=0;y<h;y++){let s=0;for(let x=0;x<w;x++)s+=mask[y*w+x];rowScore[y]=s}
+    function getRuns(values,threshold,minLen){const out=[];let s=-1;for(let i=0;i<=values.length;i++){const on=i<values.length&&values[i]>=threshold;if(on&&s<0)s=i;if(!on&&s>=0){if(i-s>=minLen)out.push([s,i-1]);s=-1}}return out}
+    let rows=getRuns(rowScore,Math.max(12,Math.floor(w*.18)),5);
+    let bestRows=[];
+    for(let i=0;i<rows.length;i++){
+      const group=[rows[i]];
+      for(let j=i+1;j<rows.length;j++){
+        const prev=group[group.length-1],cur=rows[j],gap=cur[0]-prev[1]-1;
+        const ph=prev[1]-prev[0]+1,ch=cur[1]-cur[0]+1;
+        if(gap>12||ch<ph*.45||ch>ph*1.8)break;
+        group.push(cur);
+      }
+      if(group.length>bestRows.length)bestRows=group;
+    }
+    if(bestRows.length<4||bestRows.length>12)return false;
+    const y0=bestRows[0][0],y1=bestRows[bestRows.length-1][1],boardH=y1-y0+1;
+    const colScore=new Int32Array(w);
+    for(let x=0;x<w;x++){let s=0;for(let y=y0;y<=y1;y++)s+=mask[y*w+x];colScore[x]=s}
+    const cols=getRuns(colScore,Math.max(12,Math.floor(boardH*.18)),5);
+    if(cols.length!==bestRows.length)return false;
+    const widths=cols.map(v=>v[1]-v[0]+1),heights=bestRows.map(v=>v[1]-v[0]+1);
+    const med=a=>{const q=a.slice().sort((x,y)=>x-y);return q[Math.floor(q.length/2)]};
+    const mw=med(widths),mh=med(heights);
+    if(widths.some(v=>Math.abs(v-mw)>mw*.45)||heights.some(v=>Math.abs(v-mh)>mh*.45))return false;
+    const x0=cols[0][0],x1=cols[cols.length-1][1];
+    const pad=Math.max(4,Math.round(Math.min(mw,mh)*.10));
+    crop={x:clamp(x0-pad,0,w-1),y:clamp(y0-pad,0,h-1),w:clamp(x1-x0+1+pad*2,1,w),h:clamp(y1-y0+1+pad*2,1,h)};
+    return true;
+  }
+
+  function initialCrop(c){
+    // Prefer the actual colored puzzle grid. If it cannot be confidently found,
+    // retain the small full-screenshot fallback so manual cropping still works.
+    if(!autoDetectCrop(c)){
+      const padX=Math.round(c.width*.025),padY=Math.round(c.height*.025);
+      crop={x:padX,y:padY,w:c.width-padX*2,h:c.height-padY*2};
+    }
+  }
   function point(e){const c=getCanvas(),r=c.getBoundingClientRect();return{x:(e.clientX-r.left)*(c.width/r.width),y:(e.clientY-r.top)*(c.height/r.height)}}
   function hit(p){const c=getCanvas(),hs=Math.max(35,c.width*.065),pts=[[crop.x,crop.y,'nw'],[crop.x+crop.w,crop.y,'ne'],[crop.x,crop.y+crop.h,'sw'],[crop.x+crop.w,crop.y+crop.h,'se']];for(const [x,y,k] of pts)if(Math.hypot(p.x-x,p.y-y)<=hs)return k;if(p.x>=crop.x&&p.x<=crop.x+crop.w&&p.y>=crop.y&&p.y<=crop.y+crop.h)return'move';return null}
   function pointerDown(e){e.preventDefault();const p=point(e),type=hit(p);if(!type)return;const c=getCanvas();try{c.setPointerCapture(e.pointerId)}catch(_){}drag={type,sx:p.x,sy:p.y,orig:{...crop}}}
@@ -50,7 +101,7 @@
     const old=preview.querySelector('.crop-wrap');if(old)old.remove();const wrap=document.createElement('div');wrap.className='crop-wrap';const cc=document.createElement('canvas');cc.id='cropCanvas';cc.width=c.width;cc.height=c.height;cc.style.width=c.width+'px';cc.style.height=c.height+'px';wrap.appendChild(cc);preview.insertBefore(wrap,preview.firstChild);
     let actions=preview.querySelector('.crop-actions');if(actions)actions.remove();actions=document.createElement('div');actions.className='crop-actions';actions.innerHTML='<button id="resetCrop">↺ Reset</button><button id="cropDetect" class="crop-primary">✂️ Crop & Detect</button><button id="cancelCrop">Cancel</button>';preview.appendChild(actions);
     initialCrop(cc);draw();cc.addEventListener('pointerdown',pointerDown,{passive:false});cc.addEventListener('pointermove',pointerMove,{passive:false});cc.addEventListener('pointerup',pointerUp,{passive:false});cc.addEventListener('pointercancel',pointerUp,{passive:false});cc.addEventListener('lostpointercapture',()=>{drag=null});
-    $('resetCrop').onclick=()=>{initialCrop(cc);draw();showToast('↺ Crop reset.')};$('cancelCrop').onclick=()=>{preview.hidden=true};$('cropDetect').onclick=()=>cropAndDetect();preview.hidden=false;showToast('Adjust the red corners around the puzzle, then tap Crop & Detect.',3500)
+    $('resetCrop').onclick=()=>{initialCrop(cc);draw();showToast('↺ Board detection reset.')};$('cancelCrop').onclick=()=>{preview.hidden=true};$('cropDetect').onclick=()=>cropAndDetect();preview.hidden=false;showToast('🔴 Board detected. Adjust the red corners if needed, then tap Crop & Detect.',3500)
   }
 
   function cropAndDetect(){
